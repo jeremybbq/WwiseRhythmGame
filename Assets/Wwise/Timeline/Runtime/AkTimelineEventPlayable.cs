@@ -1,14 +1,25 @@
-﻿#if !(UNITY_DASHBOARD_WIDGET || UNITY_WEBPLAYER || UNITY_WII || UNITY_WIIU || UNITY_NACL || UNITY_FLASH || UNITY_BLACKBERRY) // Disable under unsupported platforms.
+#if !(UNITY_DASHBOARD_WIDGET || UNITY_WEBPLAYER || UNITY_WII || UNITY_WIIU || UNITY_NACL || UNITY_FLASH || UNITY_BLACKBERRY) // Disable under unsupported platforms.
 #if !UNITY_2019_1_OR_NEWER
 #define AK_ENABLE_TIMELINE
 #endif
 #if AK_ENABLE_TIMELINE
 
-//////////////////////////////////////////////////////////////////////
-//
-// Copyright (c) 2020 Audiokinetic Inc. / All Rights Reserved
-//
-//////////////////////////////////////////////////////////////////////
+/*******************************************************************************
+The content of this file includes portions of the proprietary AUDIOKINETIC Wwise
+Technology released in source code form as part of the game integration package.
+The content of this file may not be used without valid licenses to the
+AUDIOKINETIC Wwise Technology.
+Note that the use of the game engine is subject to the Unity(R) Terms of
+Service at https://unity3d.com/legal/terms-of-service
+ 
+License Usage
+ 
+Licensees holding valid licenses to the AUDIOKINETIC Wwise Technology may use
+this file in accordance with the end user license agreement provided with the
+software or, alternatively, in accordance with the terms contained
+in a written agreement between you and Audiokinetic Inc.
+Copyright (c) 2023 Audiokinetic Inc.
+*******************************************************************************/
 
 /// @brief Defines the behavior of a \ref AkTimelineEventPlayable within a \ref AkTimelineEventTrack.
 /// \sa
@@ -48,6 +59,11 @@ public class AkTimelineEventPlayableBehavior : UnityEngine.Playables.PlayableBeh
 	[UnityEditor.InitializeOnLoadMethod]
 	private static void DetermineCanPostEvents()
 	{
+		if (UnityEditor.AssetDatabase.IsAssetImportWorkerProcess())
+		{
+			return;
+		}
+
 		UnityEditor.Compilation.CompilationPipeline.assemblyCompilationFinished += (string text, UnityEditor.Compilation.CompilerMessage[] messages) =>
 		{
 			if (!UnityEditor.EditorApplication.isPlaying)
@@ -96,36 +112,63 @@ public class AkTimelineEventPlayableBehavior : UnityEngine.Playables.PlayableBeh
 	private bool wasScrubbingAndRequiresRetrigger;
 	public bool StopEventAtClipEnd;
 
-	private bool IsScrubbing(UnityEngine.Playables.FrameData info)
+	public bool PrintDebugInformation = false;
+
+	private bool IsScrubbing(UnityEngine.Playables.Playable playable, UnityEngine.Playables.FrameData info)
 	{
-#if !UNITY_2018_2_OR_NEWER
-		// We disable scrubbing in edit mode, due to an issue with how FrameData.EvaluationType is handled in edit mode.
-		// This is a known issue and Unity are aware of it: https://fogbugz.unity3d.com/default.asp?953109_kitf7pso0vmjm0m0
-		if (!UnityEngine.Application.isPlaying)
-			return false;
-#endif
 #if UNITY_EDITOR
-		return !UnityEngine.Application.isPlaying && info.evaluationType == UnityEngine.Playables.FrameData.EvaluationType.Evaluate;
-#else
-        return false;
+		if (!UnityEngine.Application.isPlaying)
+		{
+			return info.evaluationType == UnityEngine.Playables.FrameData.EvaluationType.Evaluate;
+		}
 #endif
+		var previousTime = UnityEngine.Playables.PlayableExtensions.GetPreviousTime(playable);
+		var currentTime = UnityEngine.Playables.PlayableExtensions.GetTime(playable);
+		var computedDelta = System.Math.Abs(currentTime - previousTime);
+
+		// Unfortunately, we can't use info.seekOccurred, because it is always true.
+		// When time is explicitely set using playable.time, deltaTime is zero, evaluationType is Evaluate, and 
+		// either previous time or current time is non-zero
+		// However, if time is added to playable.time (for example, playable.time += 1;), evaluationType remains
+		// Playing.
+		return (info.deltaTime == 0 && (previousTime > 0 || currentTime > 0)) || (computedDelta > info.deltaTime);
+	}
+
+	void PrintInfo(string FunctionName, UnityEngine.Playables.Playable playable, UnityEngine.Playables.FrameData info)
+	{
+		if (PrintDebugInformation)
+		{
+			var previousTime = UnityEngine.Playables.PlayableExtensions.GetPreviousTime(playable);
+			var currentTime = UnityEngine.Playables.PlayableExtensions.GetTime(playable);
+			var computedDelta = System.Math.Abs(currentTime - previousTime);
+
+			UnityEngine.Debug.Log($"{FunctionName}: prevTime={previousTime}; curTime={currentTime}; computedDelta={computedDelta}; evalType={info.evaluationType}; deltaTime={info.deltaTime}; playState={info.effectivePlayState}; timeHeld={info.timeHeld}; speed={info.effectiveSpeed}; parentSpeed={info.effectiveParentSpeed}");
+		}
 	}
 
 	public override void PrepareFrame(UnityEngine.Playables.Playable playable, UnityEngine.Playables.FrameData info)
 	{
 		base.PrepareFrame(playable, info);
+		PrintInfo("PrepareFrame", playable, info);
 
 		if (akEvent == null)
 			return;
 
 		var shouldPlay = ShouldPlay(playable);
-		if (IsScrubbing(info) && shouldPlay)
+		if (IsScrubbing(playable, info) && shouldPlay)
 		{
 			requiredActions |= Actions.Seek;
 
 			if (!eventIsPlaying)
 			{
-				requiredActions |= Actions.Playback | Actions.DelayedStop;
+				requiredActions |= Actions.Playback;
+#if UNITY_EDITOR
+				if (!UnityEngine.Application.isPlaying)
+				{
+					// If we've explicitly set the playhead, only play a small snippet.
+					requiredActions |= Actions.DelayedStop;
+				}
+#endif
 				CheckForFadeInFadeOut(playable);
 			}
 		}
@@ -145,6 +188,7 @@ public class AkTimelineEventPlayableBehavior : UnityEngine.Playables.PlayableBeh
 
 	public override void OnBehaviourPlay(UnityEngine.Playables.Playable playable, UnityEngine.Playables.FrameData info)
 	{
+		PrintInfo("OnBehaviourPlay", playable, info);
 		base.OnBehaviourPlay(playable, info);
 
 		if (akEvent == null)
@@ -156,11 +200,17 @@ public class AkTimelineEventPlayableBehavior : UnityEngine.Playables.PlayableBeh
 
 		requiredActions |= Actions.Playback;
 
-		if (IsScrubbing(info))
+		if (IsScrubbing(playable, info))
 		{
 			wasScrubbingAndRequiresRetrigger = true;
-			// If we've explicitly set the playhead, only play a small snippet.
-			requiredActions |= Actions.DelayedStop;
+
+#if UNITY_EDITOR
+			if (!UnityEngine.Application.isPlaying)
+			{
+				// If we've explicitly set the playhead, only play a small snippet.
+				requiredActions |= Actions.DelayedStop;
+			}
+#endif
 		}
 		else if (GetProportionalTime(playable) > alph)
 		{
@@ -173,6 +223,7 @@ public class AkTimelineEventPlayableBehavior : UnityEngine.Playables.PlayableBeh
 
 	public override void OnBehaviourPause(UnityEngine.Playables.Playable playable, UnityEngine.Playables.FrameData info)
 	{
+		PrintInfo("OnBehaviourPause", playable, info);
 		wasScrubbingAndRequiresRetrigger = false;
 
 		base.OnBehaviourPause(playable, info);
@@ -184,6 +235,7 @@ public class AkTimelineEventPlayableBehavior : UnityEngine.Playables.PlayableBeh
 
 	public override void ProcessFrame(UnityEngine.Playables.Playable playable, UnityEngine.Playables.FrameData info, object playerData)
 	{
+		PrintInfo("ProcessFrame", playable, info);
 		base.ProcessFrame(playable, info, playerData);
 
 		if (akEvent == null)
@@ -398,6 +450,7 @@ public class AkTimelineEventPlayable : UnityEngine.Playables.PlayableAsset, Unit
 	private bool retriggerEvent = false;
 
 	public bool UseWwiseEventDuration = true;
+	public bool PrintDebugInformation = false;
 
 	[UnityEngine.SerializeField]
 	private bool StopEventAtClipEnd = true;
@@ -417,6 +470,7 @@ public class AkTimelineEventPlayable : UnityEngine.Playables.PlayableAsset, Unit
 		b.akEvent = akEvent;
 		b.blendInCurve = blendInCurve;
 		b.blendOutCurve = blendOutCurve;
+		b.PrintDebugInformation = PrintDebugInformation;
 
 		if (owningClip != null)
 		{
@@ -444,6 +498,7 @@ public class AkTimelineEventPlayable : UnityEngine.Playables.PlayableAsset, Unit
 		private UnityEditor.SerializedProperty akEvent;
 		private UnityEditor.SerializedProperty retriggerEvent;
 		private UnityEditor.SerializedProperty UseWwiseEventDuration;
+		private UnityEditor.SerializedProperty PrintDebugInformation;
 		private UnityEditor.SerializedProperty StopEventAtClipEnd;
 		private UnityEditor.SerializedProperty blendInCurve;
 		private UnityEditor.SerializedProperty blendOutCurve;
@@ -457,6 +512,7 @@ public class AkTimelineEventPlayable : UnityEngine.Playables.PlayableAsset, Unit
 			akEvent = serializedObject.FindProperty("akEvent");
 			retriggerEvent = serializedObject.FindProperty("retriggerEvent");
 			UseWwiseEventDuration = serializedObject.FindProperty("UseWwiseEventDuration");
+			PrintDebugInformation = serializedObject.FindProperty("PrintDebugInformation");
 			StopEventAtClipEnd = serializedObject.FindProperty("StopEventAtClipEnd");
 			blendInCurve = serializedObject.FindProperty("blendInCurve");
 			blendOutCurve = serializedObject.FindProperty("blendOutCurve");
@@ -502,6 +558,10 @@ public class AkTimelineEventPlayable : UnityEngine.Playables.PlayableAsset, Unit
 					}
 				}
 			}
+			using (new UnityEditor.EditorGUILayout.VerticalScope("box"))
+			{
+				UnityEditor.EditorGUILayout.PropertyField(PrintDebugInformation);
+			}
 
 			serializedObject.ApplyModifiedProperties();
 		}
@@ -515,16 +575,15 @@ public class AkTimelineEventPlayable : UnityEngine.Playables.PlayableAsset, Unit
 		[UnityEditor.InitializeOnLoadMethod]
 		public static void SetupSoundbankSetting()
 		{
+			if (UnityEditor.AssetDatabase.IsAssetImportWorkerProcess())
+			{
+				return;
+			}
+
 			AkUtilities.EnableBoolSoundbankSettingInWproj("SoundBankGenerateEstimatedDuration", AkWwiseEditorSettings.WwiseProjectAbsolutePath);
 
-			UnityEditor.EditorApplication.update += RunOnce;
-			AkWwiseFileWatcher.Instance.XMLUpdated += UpdateAllClips;
-		}
-
-		private static void RunOnce()
-		{
-			UpdateAllClips();
-			UnityEditor.EditorApplication.update -= RunOnce;
+			UnityEditor.EditorApplication.delayCall += UpdateAllClips;
+			AkWwiseSoundbanksInfoXMLFileWatcher.Instance.XMLUpdated += UpdateAllClips;
 		}
 
 		private static void UpdateAllClips()

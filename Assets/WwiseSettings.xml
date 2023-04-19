@@ -6,12 +6,15 @@
   <CreatedPicker>true</CreatedPicker>
   <CreateWwiseGlobal>true</CreateWwiseGlobal>
   <CreateWwiseListener>true</CreateWwiseListener>
+  <ObjectReferenceAutoCleanup>true</ObjectReferenceAutoCleanup>
   <ShowMissingRigidBodyWarning>true</ShowMissingRigidBodyWarning>
   <ShowSpatialAudioWarningMsg>true</ShowSpatialAudioWarningMsg>
-  <WwiseInstallationPathMac />
+  <WwiseInstallationPathMac>/Applications/Audiokinetic/Wwise 2022.1.3.8179/Wwise.app</WwiseInstallationPathMac>
   <WwiseInstallationPathWindows>C:\Wwise</WwiseInstallationPathWindows>
-  <WwiseProjectPath>../../UnityWwiseRhythmGame/RhythmGameTemplate_WwiseProject/QWOPRevolution.wproj</WwiseProjectPath>
+  <WwiseProjectPath>../RhythmGameTemplate_WwiseProject/QWOPRevolution.wproj</WwiseProjectPath>
   <UseWaapi>true</UseWaapi>
   <WaapiPort>8080</WaapiPort>
   <WaapiIP>127.0.0.1</WaapiIP>
+  <XMLTranslatorTimeout>10</XMLTranslatorTimeout>
+  <WaapiTranslatorTimeout>0</WaapiTranslatorTimeout>
 </WwiseSettings>

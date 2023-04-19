@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<WwiseDocument Type="WorkUnit" ID="{617D854A-B360-4264-A9FD-7563999D440C}" SchemaVersion="103">
+<WwiseDocument Type="WorkUnit" ID="{617D854A-B360-4264-A9FD-7563999D440C}" SchemaVersion="110">
 	<Busses>
 		<WorkUnit Name="Default Work Unit" ID="{617D854A-B360-4264-A9FD-7563999D440C}" PersistMode="Standalone">
 			<ChildrenList>
 				<Bus Name="Master Audio Bus" ID="{1514A4D8-1DA6-412A-A17E-75CA0C2149F3}">
 					<ReferenceList>
-						<Reference Name="AudioDevice">
+						<Reference Name="AudioDevice" PluginName="System" CompanyID="0" PluginID="174" PluginType="7">
 							<ObjectRef Name="System" ID="{97FBD659-8C4E-4DDB-8C1E-B5C40AA531A9}" WorkUnitID="{C6F958EF-B8E3-4A36-A4F5-B7BF8E46A45F}"/>
 						</Reference>
 					</ReferenceList>
@@ -36,13 +36,10 @@
 											<ObjectRef Name="LowMeter" ID="{BE124899-25CD-4D78-B04D-A7954FE6B44D}" WorkUnitID="{D18E7E1E-DCB6-49A7-8222-43DA8C2CC13F}"/>
 										</Reference>
 									</ReferenceList>
-									<ObjectLists/>
 								</AuxBus>
 							</ChildrenList>
-							<ObjectLists/>
 						</Bus>
 					</ChildrenList>
-					<ObjectLists/>
 				</Bus>
 			</ChildrenList>
 		</WorkUnit>
